@@ -42,7 +42,6 @@ def create_directory(path):
     print(f"📁 Creado directorio: {path}")
 
 def create_file(path, content=""):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, 'w', encoding='utf-8') as f:
         f.write(content)
     print(f"📄 Creado archivo: {path}")
@@ -50,253 +49,206 @@ def create_file(path, content=""):
 def run_npm_install(package=None):
     try:
         if package:
-            cmd = ["npm", "install", package, "--save", "--force"]
+            cmd = ["npm", "install", package, "--save"]
         else:
-            cmd = ["npm", "install", "--force"]
+            cmd = ["npm", "install"]
         
-        result = subprocess.run(
-            cmd,
-            shell=True,
-            check=True,
-            capture_output=True,
-            text=True
-        )
-        if result.returncode == 0:
-            return True
-        else:
-            print(f"❌ Error en npm install: {result.stderr}")
-            return False
-    except subprocess.CalledProcessError as e:
+        result = subprocess.run(cmd, shell=True, check=True)
+        return result.returncode == 0
+    except subprocess.CalledProcessError:
         print(f"❌ Error instalando {'dependencias' if not package else package}")
-        print(f"Error: {e.stderr}")
-        return False
-    except Exception as e:
-        print(f"❌ Error inesperado: {e}")
         return False
 
-def create_update_script():
-    update_script = """#!/bin/bash
-echo "🔍 Verificando actualizaciones de dependencias..."
-npm outdated
-
-echo "\\n📦 Actualizando dependencias..."
-npm update
-
-echo "\\n🛡️ Verificando vulnerabilidades..."
-npm audit
-
-echo "\\n🧹 Ejecutando npm audit fix..."
-npm audit fix
-
-echo "\\n✨ Proceso de actualización completado"
-"""
-    create_file("update-deps.sh", update_script)
-    # Hacer el script ejecutable
-    os.chmod("update-deps.sh", 0o755)
 def setup_frontend():
     print("\n🚀 Configurando Frontend...")
-    try:
-        os.chdir("frontend")
-    except Exception as e:
-        print(f"❌ Error al cambiar al directorio frontend: {e}")
-        return False
+    os.chdir("frontend")
     
     # Inicializar proyecto Vite con React
     print("Inicializando proyecto Vite con React...")
-    try:
-        process = subprocess.run(
-            ["npm", "create", "vite@latest", ".", "--", "--template", "react-ts"],
-            shell=True,
-            input="y\n",
-            text=True,
-            capture_output=True
-        )
-        if process.returncode != 0:
-            print("❌ Error inicializando proyecto Vite")
-            print(process.stderr)
-            return False
-    except Exception as e:
-        print(f"❌ Error: {e}")
-        return False
-
+    process = subprocess.Popen(
+        ["npm", "create", "vite@latest", ".", "--", "--template", "react"],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        shell=True,
+        text=True
+    )
+    # Enviar "1" para seleccionar "Remove existing files and continue"
+    stdout, stderr = process.communicate(input="1\n")
+    
     print("📦 Instalando dependencias base del frontend...")
     if not run_npm_install():
         print("❌ Error instalando dependencias base")
-        os.chdir("..")
         return False
     
-    # Lista actualizada de dependencias
+    # Instalar dependencias adicionales una por una
+    print("📦 Instalando dependencias adicionales...")
     dependencies = [
-        "@mui/material@^5.15.0",
-        "@emotion/react@^11.11.1",
-        "@emotion/styled@^11.11.0",
-        "@mui/icons-material@^5.15.0",
-        "konva@^9.2.3",
-        "react-konva@^18.2.10",
-        "typescript@^5.3.0",
-        "@types/node@^20.10.0",
-        "@types/react@^18.2.0",
-        "@types/react-dom@^18.2.0",
-        "axios@^1.6.2",
-        "zustand@^4.4.7",
-        "@typescript-eslint/eslint-plugin@^6.13.1",
-        "@typescript-eslint/parser@^6.13.1",
-        "eslint@^8.55.0",
-        "eslint-plugin-react-hooks@^4.6.0",
-        "eslint-plugin-react-refresh@^0.4.5",
-        "prettier@^3.1.0"
+        "@mui/material",
+        "@emotion/react",
+        "@emotion/styled",
+        "@mui/icons-material",
+        "fabric"
     ]
     
     for dep in dependencies:
         print(f"Instalando {dep}...")
         if not run_npm_install(dep):
             print(f"❌ Error instalando {dep}")
-            continue
-
-    # Crear tsconfig.json con configuración optimizada
-    tsconfig = {
-        "compilerOptions": {
-            "target": "ES2020",
-            "useDefineForClassFields": True,
-            "lib": ["ES2020", "DOM", "DOM.Iterable"],
-            "module": "ESNext",
-            "skipLibCheck": True,
-            "moduleResolution": "bundler",
-            "allowImportingTsExtensions": True,
-            "resolveJsonModule": True,
-            "isolatedModules": True,
-            "noEmit": True,
-            "jsx": "react-jsx",
-            "strict": True,
-            "noUnusedLocals": True,
-            "noUnusedParameters": True,
-            "noFallthroughCasesInSwitch": True,
-            "types": ["vite/client"],
-            "baseUrl": ".",
-            "paths": {
-                "@/*": ["src/*"]
-            }
-        },
-        "include": ["src"],
-        "references": [{ "path": "./tsconfig.node.json" }]
-    }
+            return False
+        print(f"✅ {dep} instalado correctamente")
     
-    create_file("tsconfig.json", json.dumps(tsconfig, indent=2))
+    os.chdir("..")
+    return True
 
-    # Actualizar package.json
-    with open('package.json', 'r') as f:
-        package_data = json.load(f)
+def setup_backend():
+    print("\n🚀 Configurando Backend...")
+    os.chdir("backend")
 
-    package_data['scripts'].update({
-        "dev": "vite",
-        "build": "tsc && vite build",
-        "preview": "vite preview",
-        "update-deps": "npm update && npm audit fix",
-        "check-updates": "npm outdated",
-        "type-check": "tsc --noEmit",
-        "lint": "eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
-        "format": "prettier --write \"src/**/*.{ts,tsx}\""
-    })
-
-    package_data['engines'] = {
-        "node": ">=18.0.0"
-    }
-
-    with open('package.json', 'w') as f:
-        json.dump(package_data, f, indent=2)
-
-    # Crear archivo de configuración de ESLint
-    eslint_config = {
-        "root": True,
-        "env": {
-            "browser": True,
-            "es2020": True
+    # Crear package.json
+    package_json = {
+        "name": "pixelcraft-backend",
+        "version": "1.0.0",
+        "description": "Backend para PixelCraft - Editor de imágenes",
+        "main": "src/index.js",
+        "scripts": {
+            "start": "node src/index.js",
+            "dev": "nodemon src/index.js",
+            "test": "echo \"Error: no test specified\" && exit 1"
         },
-        "extends": [
-            "eslint:recommended",
-            "plugin:@typescript-eslint/recommended",
-            "plugin:react-hooks/recommended"
-        ],
-        "ignorePatterns": ["dist", ".eslintrc.json"],
-        "parser": "@typescript-eslint/parser",
-        "plugins": ["react-refresh"],
-        "rules": {
-            "react-refresh/only-export-components": [
-                "warn",
-                { "allowConstantExport": True }
-            ]
+        "dependencies": {
+            "express": "^4.18.2",
+            "cors": "^2.8.5",
+            "dotenv": "^16.3.1",
+            "multer": "^1.4.5-lts.1",
+            "sharp": "^0.32.6"
+        },
+        "devDependencies": {
+            "nodemon": "^3.0.1"
         }
     }
-    create_file(".eslintrc.json", json.dumps(eslint_config, indent=2))
 
-    # Crear archivo de configuración de Prettier
-    prettier_config = {
-        "semi": True,
-        "singleQuote": True,
-        "trailingComma": "es5",
-        "tabWidth": 2,
-        "printWidth": 100
-    }
-    create_file(".prettierrc", json.dumps(prettier_config, indent=2))
+    create_file("package.json", json.dumps(package_json, indent=2))
 
-    create_update_script()
-    
-    try:
-        os.chdir("..")
-        return True
-    except Exception as e:
-        print(f"❌ Error al volver al directorio raíz: {e}")
+    # Crear .env
+    env_content = """PORT=3000
+UPLOAD_DIR=uploads
+ALLOWED_ORIGINS=http://localhost:5173"""
+    create_file(".env", env_content)
+
+    # Crear .gitignore
+    gitignore_content = """node_modules/
+.env
+uploads/*
+!uploads/.gitkeep"""
+    create_file(".gitignore", gitignore_content)
+
+    # Crear archivo principal index.js
+    index_js_content = """const express = require('express');
+const cors = require('cors');
+const dotenv = require('dotenv');
+
+dotenv.config();
+
+const app = express();
+const port = process.env.PORT || 3000;
+
+app.use(cors({
+origin: process.env.ALLOWED_ORIGINS.split(',')
+}));
+app.use(express.json());
+
+app.get('/', (req, res) => {
+res.json({ message: 'PixelCraft API is running' });
+});
+
+app.listen(port, () => {
+console.log(`Server is running on port ${port}`);
+});"""
+    create_file("src/index.js", index_js_content)
+
+    # Crear archivo de configuración
+    config_js_content = """require('dotenv').config();
+
+module.exports = {
+port: process.env.PORT || 3000,
+uploadDir: process.env.UPLOAD_DIR || 'uploads',
+allowedOrigins: process.env.ALLOWED_ORIGINS.split(',')
+};"""
+    create_file("src/config/config.js", config_js_content)
+
+    # Crear archivo vacío en uploads para mantener el directorio en git
+    create_file("uploads/.gitkeep", "")
+
+    print("📦 Instalando dependencias del backend...")
+    if not run_npm_install():
+        print("❌ Error instalando dependencias del backend")
         return False
-    create_update_script()
 
-    try:
-        os.chdir("..")
-        return True
-    except Exception as e:
-        print(f"❌ Error al volver al directorio raíz: {e}")
-        return False
+    os.chdir("..")
+    return True
 
 def setup_project():
     if not check_dependencies():
-        return False
+        sys.exit(1)
 
-    print("\n🎯 Iniciando configuración del proyecto...")
-    
-    # Crear estructura de directorios
-    create_directory("frontend")
-    
-    # Configurar frontend
-    if not setup_frontend():
-        print("❌ Error en la configuración del frontend")
-        return False
+    # Limpiar caché de npm
+    print("🧹 Limpiando caché de npm...")
+    subprocess.run(["npm", "cache", "clean", "--force"], shell=True)
 
-    print("""
-✅ Configuración completada con éxito!
+    # Directorio raíz del proyecto
+    root_dir = "pixelcraft"
+    create_directory(root_dir)
+    os.chdir(root_dir)
 
-Para comenzar:
-1. cd frontend
-2. npm run dev
+    # Estructura Frontend
+    frontend_dir = "frontend"
+    create_directory(frontend_dir)
 
-Comandos disponibles:
-- npm run dev: Iniciar servidor de desarrollo
-- npm run build: Construir para producción
-- npm run preview: Previsualizar build
-- npm run lint: Ejecutar ESLint
-- npm run format: Formatear código con Prettier
-- npm run type-check: Verificar tipos TypeScript
-- npm run update-deps: Actualizar dependencias
-- npm run check-updates: Verificar actualizaciones disponibles
+    # Estructura Backend
+    backend_dir = "backend"
+    create_directory(backend_dir)
 
-¡Feliz desarrollo! 🚀
-    """)
-    return True
+    # Frontend directories
+    frontend_dirs = [
+        "src/components/Editor",
+        "src/components/Toolbar",
+        "src/components/Filters",
+        "src/services",
+        "src/utils",
+        "public",
+    ]
+
+    for dir_path in frontend_dirs:
+        create_directory(os.path.join(frontend_dir, dir_path))
+
+    # Backend directories
+    backend_dirs = [
+        "src/controllers",
+        "src/services",
+        "src/models",
+        "src/middleware",
+        "src/config",
+        "uploads"
+    ]
+
+    for dir_path in backend_dirs:
+        create_directory(os.path.join(backend_dir, dir_path))
+
+    frontend_success = setup_frontend()
+    backend_success = setup_backend()
+
+    if frontend_success and backend_success:
+        print("\n✨ ¡Proyecto creado exitosamente!")
+        print("\nPasos siguientes:")
+        print("1. cd pixelcraft/frontend")
+        print("2. npm run dev")
+        print("\nEn otra terminal:")
+        print("3. cd pixelcraft/backend")
+        print("4. npm run dev")
+    else:
+        print("\n❌ Hubo errores durante la instalación")
+        print("Por favor, verifica los mensajes de error anteriores")
 
 if __name__ == "__main__":
-    try:
-        setup_project()
-    except KeyboardInterrupt:
-        print("\n\n❌ Proceso interrumpido por el usuario")
-        sys.exit(1)
-    except Exception as e:
-        print(f"\n\n❌ Error inesperado: {e}")
-        sys.exit(1)
+    setup_project()
