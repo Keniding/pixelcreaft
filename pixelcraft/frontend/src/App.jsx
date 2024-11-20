@@ -2,6 +2,7 @@ import { useState } from 'react'
 import reactLogo from './assets/react.svg'
 import viteLogo from '/vite.svg'
 import './App.css'
+import ImageEditor from './components/Editor/ImageEditor'
 
 function App() {
   const [count, setCount] = useState(0)
@@ -28,8 +29,13 @@ function App() {
       <p className="read-the-docs">
         Click on the Vite and React logos to learn more
       </p>
+
+      <div>
+        <h1>Editor de Imágenes</h1>
+        <ImageEditor />
+      </div>
     </>
-  )
+  );
 }
 
 export default App
